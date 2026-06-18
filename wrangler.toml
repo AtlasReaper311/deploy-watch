@@ -4,7 +4,7 @@ compatibility_date = "2026-06-17"
 workers_dev = false
 
 routes = [
-  { pattern = "api.atlas-systems.uk/deploy-watch*", zone_name = "atlas-systems.uk" }
+  { pattern = "api.atlas-systems.uk/deploy-watch*", zone_id = "8ba6350a78c988447c111048b125f917" }
 ]
 
 [triggers]
