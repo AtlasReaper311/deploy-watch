@@ -1,0 +1,22 @@
+name = "deploy-watch"
+main = "src/index.js"
+compatibility_date = "2026-06-17"
+workers_dev = false
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "DEPLOY_STATE"
+id = "REPLACE_WITH_NAMESPACE_ID"
+
+[vars]
+ACCOUNT_ID = "49e221b7e55a9e5c45b88d08efca5771"
+PROJECT_NAME = "atlas-systems"
+
+[observability]
+enabled = true
+
+# Secrets:
+#   npx wrangler secret put CLOUDFLARE_API_TOKEN
+#   npx wrangler secret put DISCORD_DEPLOY_WEBHOOK   (same URL already used by notify-deploy.yml)
