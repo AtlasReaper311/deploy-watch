@@ -1,30 +1,36 @@
 /**
  * deploy-watch
  *
- * Polls Cloudflare Pages' own deployment status every 5 minutes and
- * posts to Discord only when a deploy's terminal outcome (success,
- * failure, or canceled) genuinely changes, never on every poll, and
- * never while a build is still in progress. Closes the gap left by
- * notify-deploy.yml, which only proves a push happened, not that the
- * resulting build actually succeeded.
+ * Polls Cloudflare Pages' own deployment status every 5 minutes.
+ * Posts to Discord only when the terminal outcome genuinely changes
+ * (see postOutcome), and separately always stores the latest known
+ * snapshot, including mid-build state, so the homepage's "Last deploy"
+ * / "Commit" / "Build" cells reflect real deploy data on a 5-minute
+ * cadence rather than depending on github-pulse's hourly-cached commit
+ * timestamp, which can't satisfy "updates whenever a deploy happens."
  */
 
 const STATE_KEY = "deploy-watch:last";
+const LATEST_KEY = "deploy-watch:latest";
 const TERMINAL_STATUSES = new Set(["success", "failure", "canceled"]);
 const COLOURS = { success: 4906624, failure: 14830410 };
+const ALLOWED_ORIGINS = ["https://atlas-systems.uk", "https://www.atlas-systems.uk", "https://status.atlas-systems.uk"];
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const cors = corsHeaders(request);
 
     if (request.method === "GET" && url.pathname.endsWith("/health")) {
-      return json(200, { ok: true, service: "deploy-watch" });
+      return json(200, { ok: true, service: "deploy-watch" }, cors);
     }
 
-    // Manual trigger for testing without waiting for the real cron
-    // tick. Gated behind the same Discord webhook secret's presence
-    // implicitly proving config is set, plus an explicit token check,
-    // so a random visitor can't spam the channel by hitting a public URL.
+    if (request.method === "GET" && url.pathname.endsWith("/latest")) {
+      const raw = await env.DEPLOY_STATE.get(LATEST_KEY);
+      if (!raw) return json(200, { ok: true, status: "unknown" }, cors);
+      return json(200, { ok: true, ...JSON.parse(raw) }, cors);
+    }
+
     if (request.method === "GET" && url.pathname.endsWith("/run")) {
       const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
       if (auth !== env.CLOUDFLARE_API_TOKEN) {
@@ -54,6 +60,29 @@ async function checkDeployments(env) {
   if (!deploy) return { changed: false, reason: "no deployments found" };
 
   const status = deploy.latest_stage?.status;
+  const meta = deploy.deployment_trigger?.metadata || {};
+  const shortSha = meta.commit_hash ? meta.commit_hash.slice(0, 7) : null;
+
+  // Always store the latest known snapshot, regardless of whether this
+  // is a new terminal outcome, so /latest reflects reality at the
+  // normal 5-minute poll cadence, mid-build included, not only on
+  // confirmed success or failure.
+  await env.DEPLOY_STATE.put(
+    LATEST_KEY,
+    JSON.stringify({
+      deployId: deploy.id,
+      status,
+      branch: meta.branch || deploy.environment || "unknown",
+      commitSha: shortSha,
+      commitUrl: meta.commit_hash
+        ? `https://github.com/AtlasReaper311/${deploy.project_name}/commit/${meta.commit_hash}`
+        : null,
+      createdOn: deploy.created_on,
+      endedOn: deploy.latest_stage?.ended_on || null,
+      checkedAt: new Date().toISOString(),
+    })
+  );
+
   if (!TERMINAL_STATUSES.has(status)) {
     return { changed: false, reason: `deploy ${deploy.id} still in progress (${status})` };
   }
@@ -64,14 +93,12 @@ async function checkDeployments(env) {
     return { changed: false, reason: "already reported this outcome" };
   }
 
-  await postOutcome(env, deploy, status);
+  await postOutcome(env, deploy, status, shortSha, meta);
   await env.DEPLOY_STATE.put(STATE_KEY, signature);
   return { changed: true, deployId: deploy.id, status };
 }
 
-async function postOutcome(env, deploy, status) {
-  const meta = deploy.deployment_trigger?.metadata || {};
-  const shortSha = meta.commit_hash ? meta.commit_hash.slice(0, 7) : "unknown";
+async function postOutcome(env, deploy, status, shortSha, meta) {
   const commitUrl = meta.commit_hash
     ? `https://github.com/AtlasReaper311/${deploy.project_name}/commit/${meta.commit_hash}`
     : null;
@@ -89,7 +116,7 @@ async function postOutcome(env, deploy, status) {
         color: ok ? COLOURS.success : COLOURS.failure,
         fields: [
           { name: "Branch", value: meta.branch || deploy.environment || "unknown", inline: true },
-          { name: "Commit", value: commitUrl ? `[${shortSha}](${commitUrl})` : shortSha, inline: true },
+          { name: "Commit", value: commitUrl ? `[${shortSha || "unknown"}](${commitUrl})` : shortSha || "unknown", inline: true },
           ...(durationSec !== null ? [{ name: "Build time", value: `${durationSec}s`, inline: true }] : []),
           { name: "Deploy URL", value: deploy.url || "—", inline: false },
         ],
@@ -103,6 +130,15 @@ async function postOutcome(env, deploy, status) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+function corsHeaders(request) {
+  const origin = request.headers.get("Origin");
+  const headers = { Vary: "Origin" };
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+  return headers;
 }
 
 function json(status, body, extraHeaders = {}) {
