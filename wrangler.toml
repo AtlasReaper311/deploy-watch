@@ -8,7 +8,7 @@ crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "DEPLOY_STATE"
-id = "REPLACE_WITH_NAMESPACE_ID"
+id = "f14a933fc4db415e967930c5e543161d"
 
 [vars]
 ACCOUNT_ID = "49e221b7e55a9e5c45b88d08efca5771"
