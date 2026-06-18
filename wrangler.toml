@@ -3,6 +3,10 @@ main = "src/index.js"
 compatibility_date = "2026-06-17"
 workers_dev = false
 
+routes = [
+  { pattern = "api.atlas-systems.uk/deploy-watch*", zone_name = "atlas-systems.uk" }
+]
+
 [triggers]
 crons = ["*/5 * * * *"]
 
