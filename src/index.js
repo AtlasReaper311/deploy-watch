@@ -43,7 +43,7 @@ export default {
     return json(404, { ok: false, error: "not found" });
   },
 
-  async scheduled(event, env, ctx) {
+  async scheduled(event, env, _ctx) {
     await checkDeployments(env);
   },
 };
