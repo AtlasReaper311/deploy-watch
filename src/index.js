@@ -12,6 +12,8 @@
  * the free-tier 1,000 write/day ceiling.
  */
 
+import { handleMeta } from "./_meta.js";
+
 const STATE_KEY  = "deploy-watch:last";   // last Discord-notified outcome signature
 const LATEST_KEY = "deploy-watch:latest"; // latest known snapshot for /latest endpoint
 
@@ -23,10 +25,25 @@ const ALLOWED_ORIGINS = [
   "https://status.atlas-systems.uk",
 ];
 
+const META = {
+  name: "deploy-watch",
+  description: "Cloudflare Pages deploy monitor for atlas-systems.uk, reporting genuine outcome changes",
+  version: "1.0.0",
+  endpoints: [
+    { method: "GET", path: "/deploy-watch/latest", description: "Latest known Pages deploy snapshot" },
+    { method: "GET", path: "/deploy-watch/health", description: "Unauthenticated liveness probe" },
+    { method: "GET", path: "/deploy-watch/run", description: "Manually trigger a deploy check; Bearer CLOUDFLARE_API_TOKEN required" },
+    { method: "GET", path: "/deploy-watch/_meta", description: "This document" },
+  ],
+  source: "https://github.com/AtlasReaper311/deploy-watch",
+};
+
 export default {
   async fetch(request, env) {
     const url  = new URL(request.url);
     const cors = corsHeaders(request);
+    const meta = handleMeta(url, META);
+    if (meta) return meta;
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: cors });
