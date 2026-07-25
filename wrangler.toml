@@ -21,6 +21,23 @@ PROJECT_NAME = "atlas-systems"
 [observability]
 enabled = true
 
+# The dev environment is read-only for this preview. Named environments do
+# not inherit production routes or cron triggers. It reads the existing deploy
+# snapshot and exposes only the workers.dev hostname.
+[env.dev]
+workers_dev = true
+
+[[env.dev.kv_namespaces]]
+binding = "DEPLOY_STATE"
+id = "f14a933fc4db415e967930c5e543161d"
+
+[env.dev.vars]
+ACCOUNT_ID = "49e221b7e55a9e5c45b88d08efca5771"
+PROJECT_NAME = "atlas-systems"
+
+[env.dev.observability]
+enabled = true
+
 # Secrets:
 #   npx wrangler secret put CLOUDFLARE_API_TOKEN
 #   npx wrangler secret put DISCORD_DEPLOY_WEBHOOK   (same URL already used by notify-deploy.yml)

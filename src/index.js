@@ -7,7 +7,7 @@
  * atlas-systems.uk homepage can show real deploy metadata.
  *
  * KV write discipline: LATEST_KEY is only written when deployId or
- * status actually changes — not on every poll. Keeps writes proportional
+ * status actually changes, not on every poll. Keeps writes proportional
  * to deploy activity rather than poll frequency, which matters against
  * the free-tier 1,000 write/day ceiling.
  */
@@ -23,6 +23,7 @@ const ALLOWED_ORIGINS = [
   "https://atlas-systems.uk",
   "https://www.atlas-systems.uk",
   "https://status.atlas-systems.uk",
+  "https://system-symphony-pr-43.atlas-systems-44t.pages.dev",
 ];
 
 const META = {
@@ -61,7 +62,7 @@ export default {
 
     if (request.method === "GET" && url.pathname.endsWith("/run")) {
       const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-      if (auth !== env.CLOUDFLARE_API_TOKEN) {
+      if (!env.CLOUDFLARE_API_TOKEN || auth !== env.CLOUDFLARE_API_TOKEN) {
         return json(401, { ok: false, error: "missing or wrong Authorization: Bearer token" });
       }
       const result = await checkDeployments(env);
@@ -96,10 +97,10 @@ async function checkDeployments(env) {
     ? `https://github.com/AtlasReaper311/${deploy.project_name}/commit/${meta.commit_hash}`
     : null;
 
-  // Read existing snapshot once — used for the LATEST_KEY write guard.
-  // checkedAt is excluded from the comparison: it changes every poll and
-  // would defeat the purpose. The stored checkedAt reflects when deploy
-  // state last changed, not when the Worker last ran.
+  // Read existing snapshot once; used for the LATEST_KEY write guard.
+  // checkedAt is excluded from the comparison because it changes every poll and
+  // would defeat the purpose. The stored checkedAt reflects when deploy state
+  // last changed, not when the Worker last ran.
   const existingRaw  = await env.DEPLOY_STATE.get(LATEST_KEY);
   const existing     = existingRaw ? JSON.parse(existingRaw) : null;
   const stateChanged = !existing || existing.deployId !== deploy.id || existing.status !== status;
@@ -155,7 +156,7 @@ async function postOutcome(env, deploy, status, shortSha, commitUrl, meta) {
             { name: "Branch",  value: meta.branch || deploy.environment || "unknown", inline: true },
             { name: "Commit",  value: commitUrl ? `[${shortSha || "unknown"}](${commitUrl})` : shortSha || "unknown", inline: true },
             ...(durationSec !== null ? [{ name: "Build time", value: `${durationSec}s`, inline: true }] : []),
-            { name: "Deploy URL", value: deploy.url || "—", inline: false },
+            { name: "Deploy URL", value: deploy.url || "unknown", inline: false },
           ],
           footer: { text: "Atlas Systems — Pipeline" },
         },
@@ -169,6 +170,9 @@ function corsHeaders(request) {
   const headers = { Vary: "Origin" };
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
+    headers["Access-Control-Allow-Headers"] = "Accept, Content-Type";
+    headers["Access-Control-Max-Age"] = "86400";
   }
   return headers;
 }
