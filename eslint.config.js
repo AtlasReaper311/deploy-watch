@@ -18,5 +18,20 @@ export default [
       "no-undef": "error",
     },
   },
+  {
+    // Offline behavioural tests run under Node's built-in test runner.
+    files: ["test/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "no-undef": "error",
+    },
+  },
   { ignores: ["dist/**", "node_modules/**", "coverage/**"] },
 ];
