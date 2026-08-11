@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   deploy:
-    uses: AtlasReaper311/atlas-infra/.github/workflows/deploy-worker.yml@f971172dc258c93dffa53b8b7a3532c5be55883d # atlas-infra W3 Worker contract enforcement
+    uses: AtlasReaper311/atlas-infra/.github/workflows/deploy-worker.yml@717a8a2bb31053b638ce570e6576f911284ecf37 # atlas-infra deploy-worker: trim CF secrets + explicit --env=""
     with:
       worker_name: deploy-watch
       run_lint: true
