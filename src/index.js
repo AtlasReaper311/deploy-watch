@@ -1,9 +1,9 @@
 /**
  * deploy-watch
  *
- * Polls Cloudflare Pages' own deployment status every 5 minutes.
+ * Polls Cloudflare Pages' production deployment status every 5 minutes.
  * Posts to Discord only when the terminal outcome genuinely changes,
- * and stores a snapshot of the latest known deploy state so the
+ * and stores a snapshot of the latest known production deploy state so the
  * atlas-systems.uk homepage can show real deploy metadata.
  *
  * KV write discipline: LATEST_KEY is only written when deployId or
@@ -15,7 +15,7 @@
 import { handleMeta } from "./_meta.js";
 
 const STATE_KEY  = "deploy-watch:last";   // last Discord-notified outcome signature
-const LATEST_KEY = "deploy-watch:latest"; // latest known snapshot for /latest endpoint
+const LATEST_KEY = "deploy-watch:latest"; // latest known production snapshot for /latest endpoint
 
 const TERMINAL_STATUSES = new Set(["success", "failure", "canceled"]);
 const COLOURS = { success: 4906624, failure: 14830410 };
@@ -28,10 +28,10 @@ const ALLOWED_ORIGINS = [
 
 const META = {
   name: "deploy-watch",
-  description: "Cloudflare Pages deploy monitor for atlas-systems.uk, reporting genuine outcome changes",
+  description: "Cloudflare Pages production deploy monitor for atlas-systems.uk, reporting genuine outcome changes",
   version: "1.0.0",
   endpoints: [
-    { method: "GET", path: "/deploy-watch/latest", description: "Latest known Pages deploy snapshot" },
+    { method: "GET", path: "/deploy-watch/latest", description: "Latest known production Pages deploy snapshot" },
     { method: "GET", path: "/deploy-watch/health", description: "Unauthenticated liveness probe" },
     { method: "GET", path: "/deploy-watch/run", description: "Manually trigger a deploy check; Bearer CLOUDFLARE_API_TOKEN required" },
     { method: "GET", path: "/deploy-watch/_meta", description: "This document" },
@@ -79,7 +79,7 @@ export default {
 
 async function checkDeployments(env) {
   const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${env.ACCOUNT_ID}/pages/projects/${env.PROJECT_NAME}/deployments?per_page=1`,
+    `https://api.cloudflare.com/client/v4/accounts/${env.ACCOUNT_ID}/pages/projects/${env.PROJECT_NAME}/deployments?env=production&per_page=1`,
     { headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` } }
   );
   const data = await res.json();
@@ -88,7 +88,13 @@ async function checkDeployments(env) {
   }
 
   const deploy = data.result?.[0];
-  if (!deploy) return { changed: false, reason: "no deployments found" };
+  if (!deploy) return { changed: false, reason: "no production deployments found" };
+  if (deploy.environment !== "production") {
+    return {
+      changed: false,
+      reason: `ignoring non-production deployment (${deploy.environment || "unknown"})`,
+    };
+  }
 
   const status    = deploy.latest_stage?.status;
   const meta      = deploy.deployment_trigger?.metadata || {};
